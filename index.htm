@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pong Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root { 
+            --neon-color: #6366f1; 
+            --bg-color: #030303;
+        }
+        
+        body { 
+            font-family: 'Press Start 2P', monospace; 
+            background-color: var(--bg-color); 
+            color: #fff; 
+            overflow: hidden; 
+            touch-action: none; 
+            user-select: none;
+        }
+        
+        
+        
+
+        /* Arcade Button Animations */
+        .arcade-btn { 
+            background: rgba(17, 17, 17, 0.8); 
+            border: 2px solid var(--neon-color); 
+            color: var(--neon-color);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 10px;
+        }
+        
+        .arcade-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 15px var(--neon-color) inset;
+        }
+
+        .arcade-btn:active { 
+            background: var(--neon-color); 
+            color: #000; 
+            box-shadow: 0 0 30px var(--neon-color); 
+            transform: scale(0.98);
+        }
+        
+        canvas { 
+            background: transparent; 
+            display: block; 
+            image-rendering: pixelated; 
+        }
+        
+        /* Smooth Modal Transitions */
+        .modal-overlay { 
+            background: rgba(0, 0, 0, 0.85); 
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 200; 
+            position: fixed; 
+            inset: 0; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .modal-content {
+            transform: translateY(-20px) scale(0.95);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: translateY(0) scale(1);
+        }
+
+        .ratio-container {
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 4 / 3; /* Wider cinematic ratio */
+            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8), 0 0 20px var(--neon-color) inset;
+            border-radius: 4px;
+        }
+
+        input[type="number"], input[type="text"] {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            color: #fff;
+            padding: 10px;
+            outline: none;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        input:focus { 
+            border-color: var(--neon-color); 
+            box-shadow: 0 0 10px var(--neon-color) inset;
+        }
+
+        /* Custom Toggle Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 45px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #222;
+            transition: .3s;
+            border-radius: 24px;
+            border: 1px solid #444;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #888;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { 
+            background-color: rgba(99, 102, 241, 0.2);
+            border-color: var(--neon-color);
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+            background-color: var(--neon-color);
+            box-shadow: 0 0 10px var(--neon-color);
+        }
+
+        /* Leaderboard Animations */
+        @keyframes pulseGlow {
+            0% { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
+            50% { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor; }
+            100% { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
+        }
+        #halo {
+            color: var(--neon-color);
+            text-shadow: var(--neon-color) 2px 2px 10px;
+        }
+        #games {
+            cursor:pointer;
+        }
+        .gold-rank { color: #fbbf24; animation: pulseGlow 2s infinite; border-color: rgba(251, 191, 36, 0.5) !important; background: rgba(251, 191, 36, 0.05) !important; }
+        .silver-rank { color: #cbd5e1; border-color: rgba(203, 213, 225, 0.4) !important; background: rgba(203, 213, 225, 0.03) !important; }
+        .bronze-rank { color: #d97706; border-color: rgba(217, 119, 6, 0.4) !important; background: rgba(217, 119, 6, 0.03) !important; }
+    </style>
+</head>
+<body class="crt">
+
+<div id="app" class="h-screen w-screen flex flex-col items-center justify-center p-4 relative z-10">
+    
+    <div id="main-menu" class="w-full max-w-lg space-y-8 text-center transition-opacity duration-300">
+        <div class="mb-14 relative">
+            
+            <h1 class="text-4xl md:text-6xl mt-2 tracking-widest text-white" id="halo">PONG</h1>
+            
+        </div>
+        
+        <div class="grid grid-cols-1 gap-5 text-sm">
+            <button onclick="startGame('easy')" class="arcade-btn py-5 rounded-lg font-bold hover:tracking-widest">EASY</button>
+            <button onclick="startGame('medium')" class="arcade-btn py-5 rounded-lg font-bold hover:tracking-widest">MEDIUM</button>
+            <button onclick="startGame('hard')" class="arcade-btn py-5 rounded-lg font-bold hover:tracking-widest">HARD</button>
+            <button onclick="showScreen('custom-menu')" class="arcade-btn py-5 rounded-lg font-bold hover:tracking-widest" style="--neon-color: #f59e0b; border-style: dashed;">CUSTOM STAGES</button>
+        </div>
+        
+        <div class="flex gap-4 mt-10 text-[10px]">
+            <button onclick="showModal('settings-modal')" class="flex-1 py-4 bg-zinc-900/80 border border-zinc-700 hover:border-zinc-500 hover:text-white rounded transition text-zinc-400">SETTINGS</button>
+            <button onclick="showHighScores()" class="flex-1 py-4 bg-zinc-900/80 border border-zinc-700 hover:border-zinc-500 hover:text-white rounded transition text-zinc-400">HIGH SCORES</button>
+        </div>
+    </div>
+
+    <div id="game-screen" class="hidden fixed inset-0 flex flex-col items-center justify-center p-2 opacity-0 transition-opacity duration-500">
+        <div class="absolute top-6 left-6 flex gap-4 z-50">
+            <div id="rally-counter" class="text-[10px] text-zinc-500 hidden">RALLY: <span id="rally-val" class="text-white">0</span></div>
+        </div>
+
+        <div class="absolute top-6 right-6 flex gap-3 z-50">
+            <button onclick="togglePause()" id="pause-btn" class="w-12 h-12 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded flex items-center justify-center hover:bg-zinc-800 hover:border-white transition text-white">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            </button>
+            <button onclick="restartGame()" class="w-12 h-12 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded flex items-center justify-center hover:bg-zinc-800 hover:border-white transition text-white">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+            <button onclick="returnToMenu()" class="w-12 h-12 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded flex items-center justify-center hover:bg-red-900/50 hover:border-red-500 transition text-red-400 hover:text-red-300">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </button>
+        </div>
+
+        <div id="pause-overlay" class="absolute inset-0 bg-black/60 z-40 hidden flex items-center justify-center backdrop-blur-sm">
+            <h2 class="text-4xl tracking-widest text-white animate-pulse">PAUSED</h2>
+        </div>
+
+        <div class="ratio-container border-2 border-zinc-800 bg-[#0a0a0a] overflow-hidden group">
+            <canvas id="pongCanvas" class="absolute inset-0 w-full h-full"></canvas>
+            
+            <div class="absolute inset-0 pointer-events-none opacity-20" style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, #000 2px, #000 4px);"></div>
+        </div>
+    </div>
+
+    <div id="high-scores-screen" class="hidden fixed inset-0 bg-[#030303] p-6 flex flex-col items-center opacity-0 transition-opacity duration-300">
+        <div class="w-full max-w-lg flex flex-col h-full pt-10">
+            <h2 class="text-2xl mb-2 text-center" style="color: var(--neon-color); text-shadow: 0 0 10px var(--neon-color);">HIGH SCORES</h2>
+            <p class="text-[9px] text-center text-zinc-500 mb-10">TOP 10 HIGHEST SCORES</p>
+            
+            <div id="scores-list" class="flex-1 overflow-y-auto space-y-4 text-xs pr-2 pb-10 custom-scrollbar">
+                </div>
+            
+            <div class="pt-4 pb-8">
+                <button onclick="showScreen('main-menu')" class="py-5 w-full bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 rounded transition text-zinc-300 text-[10px] tracking-widest">RETURN TO MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="custom-menu" class="hidden fixed inset-0 bg-[#030303] p-6 flex flex-col items-center opacity-0 transition-opacity duration-300">
+        <div class="w-full max-w-lg flex flex-col h-full pt-10">
+            <h2 class="text-2xl mb-2 text-orange-500 text-center" style="text-shadow: 0 0 10px rgba(249,115,22,0.5);">CUSTOM LEVELS</h2>
+            <p class="text-[9px] text-center text-zinc-500 mb-8">CREATE CUSTOMIZED LEVELS</p>
+            
+            <div class="flex gap-3 mb-8">
+                <button onclick="showModal('create-level-modal')" class="arcade-btn flex-1 py-4 rounded font-bold text-[10px]" style="--neon-color: #f59e0b;">NEW CUSTOM LEVEL</button>
+                <button onclick="confirmDeleteAll()" class="px-6 py-4 bg-red-950/20 text-red-500 border border-red-900/50 hover:bg-red-900/40 rounded transition text-[10px]">CLEAR ALL</button>
+            </div>
+            
+            <div id="custom-levels-list" class="flex-1 overflow-y-auto space-y-3 text-[10px] pr-2 custom-scrollbar">
+                </div>
+            
+            <div class="pt-4 pb-8">
+                <button onclick="showScreen('main-menu')" class="py-5 w-full bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 rounded transition text-zinc-300 text-[10px] tracking-widest">BACK TO MENU</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal-content bg-zinc-950 border border-zinc-700 w-full max-w-sm rounded-xl p-8 space-y-8 shadow-2xl">
+        <h3 class="text-sm text-center tracking-widest text-zinc-300">SETTINGS</h3>
+        
+        <div class="space-y-6 text-[10px] text-zinc-400">
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <label>SFX VOLUME</label>
+                    <span id="vol-display">50%</span>
+                </div>
+                <input type="range" id="vol-slider" min="0" max="100" value="50" class="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer outline-none" oninput="updateVolDisplay(); saveSettings();">
+            </div>
+            
+            <div class="space-y-3">
+                <label class="block">COLOR PALETTE</label>
+                <div class="flex items-center gap-3">
+                    <input type="color" id="theme-color" value="#6366f1" class="w-full h-12 bg-transparent border border-zinc-700 rounded cursor-pointer p-1" oninput="saveSettings()">
+                    <div class="w-12 h-12 rounded border border-zinc-700" style="background: var(--neon-color); box-shadow: 0 0 15px var(--neon-color);"></div>
+                </div>
+            </div>
+            
+            <div class="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-lg" id="games" onclick="checkpt()">
+                <span class="tracking-wide">PARTICLE FX</span>
+                <label class="switch">
+                    <input type="checkbox" id="particle-toggle" checked onchange="saveSettings()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+        
+        <button onclick="closeModal('settings-modal')" class="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] tracking-widest rounded transition">CLOSE</button>
+    </div>
+</div>
+
+<div id="create-level-modal" class="modal-overlay">
+    <div class="modal-content bg-zinc-950 border-2 border-orange-900/50 w-full max-w-md rounded-xl p-8 space-y-6 shadow-2xl">
+        <h3 class="text-sm text-orange-500 tracking-widest text-center">CREATE CUSTOM LEVEL</h3>
+        
+        <div class="space-y-4">
+            <input type="text" id="level-name" placeholder="ENTER ARENA DESIGNATION" class="w-full text-[10px] rounded-sm uppercase tracking-wider">
+            
+            <div class="grid grid-cols-2 gap-5 text-[9px] text-zinc-500">
+                <label class="space-y-2">BALL SPEED<input type="number" id="l-ball" value="5" class="w-full rounded-sm"></label>
+                <label class="space-y-2">YOUR PADDLE SPEED<input type="number" id="l-pad" value="10" class="w-full rounded-sm"></label>
+                <label class="space-y-2">AI PADDLE SPEED<input type="number" id="l-ai" value="4" class="w-full rounded-sm"></label>
+                <label class="space-y-2">AI POINTS/GOAL<input type="number" id="l-inc" value="1" class="w-full rounded-sm"></label>
+            </div>
+        </div>
+        
+        <div class="flex gap-3 pt-4">
+            <button type="button" onclick="saveCustomLevel()" class="flex-1 py-4 bg-orange-600 hover:bg-orange-500 text-white text-[10px] tracking-widest rounded transition">SAVE</button>
+            <button type="button" onclick="closeModal('create-level-modal')" class="px-8 py-4 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] tracking-widest rounded transition">CANCEL</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/** AUDIO ENGINE **/
+let audioCtx;
+function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+// Init audio on any generic interaction
+['mousedown', 'touchstart', 'keydown'].forEach(evt => {
+    window.addEventListener(evt, initAudio, { once: true });
+});
+
+function playSound(freq, type, duration, slideFreq = null) {
+    if (!audioCtx) return;
+    const vol = (gameSettings.vol / 100);
+    if (vol <= 0) return;
+    
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        if (slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, audioCtx.currentTime + duration);
+        }
+        
+        // Slightly reduced max volume to prevent clipping
+        gain.gain.setValueAtTime(vol * 0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {
+        // Fail silently if browser blocks audio rendering temporarily
+    }
+}
+
+/** STATE & LOCAL STORAGE PERSISTENCE **/
+const STORAGE_KEYS = {
+    SETTINGS: 'pong_setting_v2',
+    SCORES: 'pong_scores_v2',
+    LEVELS: 'pong_custom_levels_v2'
+};
+
+// Global settings object acts as source of truth
+let gameSettings = {
+    color: '#6366f1',
+    vol: 50,
+    particles: true
+};
+
+function updateVolDisplay() {
+    const el = document.getElementById('vol-display');
+    const slider = document.getElementById('vol-slider');
+    if (el && slider) el.innerText = `${slider.value}%`;
+}
+
+function saveSettings() {
+    // 1. Read from DOM
+    const colorInput = document.getElementById('theme-color');
+    const volInput = document.getElementById('vol-slider');
+    const particleInput = document.getElementById('particle-toggle');
+
+    if (colorInput) gameSettings.color = colorInput.value;
+    if (volInput) gameSettings.vol = parseInt(volInput.value);
+    if (particleInput) gameSettings.particles = particleInput.checked;
+    
+    // 2. Apply Visual Updates
+    document.documentElement.style.setProperty('--neon-color', gameSettings.color);
+    
+    // 3. Save to localStorage
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(gameSettings));
+}
+function checkpt() {
+  const checkbox = document.getElementById('particle-toggle');
+  checkbox.checked = !checkbox.checked; // Toggles the state
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            // Merge saved settings into the default object
+            gameSettings = { ...gameSettings, ...parsed };
+        } catch(e) {
+            console.error("Settings corrupted, resetting to defaults", e);
+        }
+    }
+    
+    // 1. Apply to CSS variable
+    document.documentElement.style.setProperty('--neon-color', gameSettings.color);
+    
+    // 2. Sync UI Inputs
+    const colorEl = document.getElementById('theme-color');
+    const volEl = document.getElementById('vol-slider');
+    const partEl = document.getElementById('particle-toggle');
+    
+    if (colorEl) colorEl.value = gameSettings.color;
+    if (volEl) {
+        volEl.value = gameSettings.vol;
+        updateVolDisplay();
+    }
+    if (partEl) partEl.checked = gameSettings.particles;
+}
+
+/** VFX ENGINES (PARTICLES & TRAILS) **/
+let particlesArray = [];
+let ballTrail = [];
+
+function createExplosion(x, y, color, intensity = 15) {
+    if (!gameSettings.particles) return;
+    for (let i = 0; i < intensity; i++) {
+        particlesArray.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 12,
+            vy: (Math.random() - 0.5) * 12,
+            life: 1.0,
+            color,
+            size: Math.random() * 3 + 2
+        });
+    }
+}
+
+/** CORE GAME LOGIC **/
+const canvas = document.getElementById('pongCanvas');
+const ctx = canvas.getContext('2d');
+let animationId, gameRunning = false, isPaused = false;
+const botColor = "#f43f5e"; // Rose neon color for AI
+
+let baseConfig = { ballSpeed: 5, paddleSpeed: 10, aiSpeed: 4, aiInc: 1, playerInc: 1 };
+let currentConfig = { ...baseConfig };
+let state = { 
+    pScore: 0, aiScore: 0, 
+    pY: 0, aiY: 0, 
+    bx: 0, by: 0, bvx: 0, bvy: 0, 
+    pH: 90, pW: 12, 
+    rally: 0 
+};
+const keys = { up: false, down: false };
+
+function resize() {
+    const container = canvas.parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    
+    // Keep internal resolution consistent regardless of screen size for fair gameplay physics
+    canvas.width = 1200; 
+    canvas.height = 675; // 16:9 ratio
+    
+    if (!gameRunning) {
+        state.pY = canvas.height/2 - state.pH/2;
+        state.aiY = canvas.height/2 - state.pH/2;
+    }
+}
+window.addEventListener('resize', resize);
+setTimeout(resize, 100);
+
+function resetBall(dir) {
+    state.bx = canvas.width / 2;
+    state.by = canvas.height / 2;
+    state.rally = 0;
+    updateRallyUI();
+    ballTrail = [];
+    
+    const speed = currentConfig.ballSpeed;
+    const side = dir || (Math.random() > 0.5 ? 1 : -1);
+    
+    // Add small delay before ball moves (represented by resetting immediately but setting a timeout could be nicer, simplified here)
+    state.bvx = side * speed;
+    state.bvy = (Math.random() - 0.5) * speed * 1.2;
+}
+
+function updateRallyUI() {
+    const rUi = document.getElementById('rally-counter');
+    const rVal = document.getElementById('rally-val');
+    if (state.rally > 2) {
+        rUi.classList.remove('hidden');
+        rVal.innerText = state.rally;
+        if(state.rally > 10) rVal.style.color = '#f59e0b'; // Gold rally
+        else rVal.style.color = '#fff';
+    } else {
+        rUi.classList.add('hidden');
+    }
+}
+
+function togglePause() {
+    if(!gameRunning) return;
+    isPaused = !isPaused;
+    
+    const overlay = document.getElementById('pause-overlay');
+    const btnSvg = document.querySelector('#pause-btn svg');
+    
+    if (isPaused) {
+        overlay.classList.remove('hidden');
+        // Switch icon to play
+        btnSvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
+    } else {
+        overlay.classList.add('hidden');
+        // Switch icon to pause
+        btnSvg.innerHTML = '<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>';
+        animationId = requestAnimationFrame(update);
+    }
+}
+
+function update() {
+    if (!gameRunning) return;
+    if (isPaused) return;
+
+    // Ball trail update
+    if (gameSettings.particles) {
+        ballTrail.push({x: state.bx, y: state.by});
+        if (ballTrail.length > 8) ballTrail.shift();
+    }
+
+    // Dynamic rally speed multiplier
+    const speedMult = 1 + (state.rally * 0.05);
+    const currentPaddleSpeed = currentConfig.paddleSpeed * speedMult;
+    const currentAiSpeed = currentConfig.aiSpeed * speedMult;
+
+    // Player Movement
+    if (keys.up) state.pY -= currentPaddleSpeed;
+    if (keys.down) state.pY += currentPaddleSpeed;
+    state.pY = Math.max(10, Math.min(canvas.height - state.pH - 10, state.pY));
+
+    // Ball movement
+    state.bx += state.bvx * speedMult;
+    state.by += state.bvy * speedMult;
+
+    // Boundary Bounce (Top/Bottom)
+    if (state.by <= 6 || state.by >= canvas.height - 6) {
+        state.bvy *= -1;
+        state.by = state.by <= 6 ? 6 : canvas.height - 6;
+        playSound(220, 'triangle', 0.1);
+        createExplosion(state.bx, state.by, '#fff', 5);
+    }
+
+    // AI Logic (Predictive tracking based on difficulty)
+    let aiTarget = state.aiY + state.pH / 2;
+    // Only track if ball is moving towards AI or if AI is slow (medium/hard tweaks)
+    if (state.bvx > 0 || currentConfig.aiSpeed > 5) {
+        // Add slight error/delay to AI
+        const predictionPoint = state.by + (Math.random() > 0.9 ? (Math.random()-0.5)*50 : 0);
+        if (aiTarget < predictionPoint - 15) state.aiY += currentAiSpeed;
+        else if (aiTarget > predictionPoint + 15) state.aiY -= currentAiSpeed;
+    } else {
+        // Return to center slowly
+        if (aiTarget < canvas.height/2 - 10) state.aiY += currentAiSpeed * 0.5;
+        else if (aiTarget > canvas.height/2 + 10) state.aiY -= currentAiSpeed * 0.5;
+    }
+    state.aiY = Math.max(10, Math.min(canvas.height - state.pH - 10, state.aiY));
+
+    // Collision Margins
+    const pX = 40; // Player offset
+    const aiX = canvas.width - 40 - state.pW; // AI offset
+
+    // Player Paddle Collision
+    if (state.bx - 6 < pX + state.pW && state.bx + 6 > pX && 
+        state.by > state.pY && state.by < state.pY + state.pH && 
+        state.bvx < 0) {
+        
+        let hit = (state.by - (state.pY + state.pH/2)) / (state.pH/2);
+        state.bvx = Math.abs(state.bvx) * 1.02; // Small base speed increase on hit
+        state.bvy = hit * (Math.abs(state.bvx) * 1.2);
+        
+        // Push ball out of paddle to prevent sticking
+        state.bx = pX + state.pW + 6;
+        
+        state.rally++;
+        updateRallyUI();
+        playSound(440, 'square', 0.1, 880 + (state.rally*20));
+        createExplosion(state.bx, state.by, gameSettings.color, 10 + state.rally);
+    }
+
+    // AI Paddle Collision
+    if (state.bx + 6 > aiX && state.bx - 6 < aiX + state.pW && 
+        state.by > state.aiY && state.by < state.aiY + state.pH && 
+        state.bvx > 0) {
+        
+        let hit = (state.by - (state.aiY + state.pH/2)) / (state.pH/2);
+        state.bvx = -Math.abs(state.bvx) * 1.02;
+        state.bvy = hit * (Math.abs(state.bvx) * 1.2);
+        
+        state.bx = aiX - 6;
+
+        state.rally++;
+        updateRallyUI();
+        playSound(330, 'square', 0.1, 110);
+        createExplosion(state.bx, state.by, botColor, 10 + state.rally);
+    }
+
+    // Scoring conditions
+    if (state.bx < -20) {
+        state.aiScore += currentConfig.aiInc;
+        playSound(100, 'sawtooth', 0.6, 40);
+        createExplosion(0, state.by, botColor, 50);
+        
+        // Screenshake effect
+        canvas.style.transform = `translate(${Math.random()*10-5}px, ${Math.random()*10-5}px)`;
+        setTimeout(() => canvas.style.transform = 'none', 100);
+        
+        resetBall(1);
+    } else if (state.bx > canvas.width + 20) {
+        state.pScore += currentConfig.playerInc;
+        playSound(650, 'sine', 0.5, 1200);
+        createExplosion(canvas.width, state.by, gameSettings.color, 50);
+        
+        canvas.style.transform = `translate(${Math.random()*10-5}px, ${Math.random()*10-5}px)`;
+        setTimeout(() => canvas.style.transform = 'none', 100);
+        
+        resetBall(-1);
+    }
+
+    // Particle Lifecycle
+    if (gameSettings.particles) {
+        particlesArray.forEach(p => {
+            p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+        });
+        particlesArray = particlesArray.filter(p => p.life > 0);
+    }
+
+    draw();
+    if (!isPaused) {
+        animationId = requestAnimationFrame(update);
+    }
+}
+
+function draw() {
+    // Clear Rect with slight trailing effect for motion blur
+    ctx.fillStyle = "rgba(10, 10, 10, 0.4)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const theme = gameSettings.color;
+    
+    // Background Grid
+    ctx.strokeStyle = "rgba(30, 30, 30, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let i=0; i<canvas.width; i+=100) { ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); }
+    for(let i=0; i<canvas.height; i+=100) { ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); }
+    ctx.stroke();
+
+    // Center Dashed Line (Tron Style)
+    ctx.setLineDash([15, 20]);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset dash
+
+    // Color Coded Scores
+    ctx.font = "80px 'Press Start 2P'";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    
+    // Player Score
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = theme;
+    ctx.fillStyle = theme + "80"; // Hex code transparency
+    ctx.fillText(state.pScore, canvas.width * 0.25, 120);
+    
+    // AI Score
+    ctx.shadowColor = botColor;
+    ctx.fillStyle = botColor + "80";
+    ctx.fillText(state.aiScore, canvas.width * 0.75, 120);
+    ctx.shadowBlur = 0;
+
+    // Ball Trails
+    if (gameSettings.particles && ballTrail.length > 0) {
+        ctx.beginPath();
+        for (let i = 0; i < ballTrail.length; i++) {
+            const point = ballTrail[i];
+            const size = 6 * (i / ballTrail.length); // Tapering size
+            const alpha = i / ballTrail.length; // Fading opacity
+            
+            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+            ctx.shadowBlur = 10 * alpha;
+            ctx.shadowColor = theme;
+            ctx.fillRect(point.x - size, point.y - size, size * 2, size * 2);
+        }
+        ctx.shadowBlur = 0;
+    }
+
+    // Particles FX
+    if (gameSettings.particles) {
+        particlesArray.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 10;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+        });
+        ctx.globalAlpha = 1.0;
+        ctx.shadowBlur = 0;
+    }
+
+    // Paddles - Modern Rounded Design
+    ctx.shadowBlur = 15;
+    
+    // Player Paddle
+    ctx.shadowColor = theme; 
+    ctx.fillStyle = theme;
+    ctx.beginPath();
+    ctx.roundRect(40, state.pY, state.pW, state.pH, 4);
+    ctx.fill();
+
+    // AI Paddle
+    ctx.shadowColor = botColor; 
+    ctx.fillStyle = botColor;
+    ctx.beginPath();
+    ctx.roundRect(canvas.width - 40 - state.pW, state.aiY, state.pW, state.pH, 4);
+    ctx.fill();
+
+    // Ball
+    ctx.shadowColor = "#fff"; 
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    // Glowing core
+    ctx.arc(state.bx, state.by, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+}
+
+/** UI FLOW & MODALS **/
+function showScreen(id) {
+    // Fade out logic
+    const screens = document.querySelectorAll('#app > div:not(.modal-overlay)');
+    screens.forEach(d => {
+        if(!d.classList.contains('hidden')) {
+            d.style.opacity = '0';
+            setTimeout(() => {
+                d.classList.add('hidden');
+            }, 300); // Wait for transition
+        }
+    });
+
+    // Fade in logic
+    setTimeout(() => {
+        const target = document.getElementById(id);
+        target.classList.remove('hidden');
+        // Small delay to ensure display block applies before opacity transition
+        setTimeout(() => target.style.opacity = '1', 50);
+        
+        if (id === 'custom-menu') renderCustomLevels();
+    }, 300);
+}
+
+function showModal(id) { 
+    const modal = document.getElementById(id);
+    modal.classList.add('active'); 
+}
+
+function closeModal(id) { 
+    const modal = document.getElementById(id);
+    modal.classList.remove('active'); 
+}
+
+function startGame(mode) {
+    initAudio();
+    if (mode === 'easy') baseConfig = { ballSpeed: 6, paddleSpeed: 12, aiSpeed: 4, aiInc: 1, playerInc: 1 };
+    else if (mode === 'medium') baseConfig = { ballSpeed: 9, paddleSpeed: 14, aiSpeed: 7, aiInc: 1, playerInc: 1 };
+    else if (mode === 'hard') baseConfig = { ballSpeed: 12, paddleSpeed: 16, aiSpeed: 12, aiInc: 1, playerInc: 1 };
+    
+    currentConfig = { ...baseConfig };
+    
+    showScreen('game-screen');
+    resize();
+    state.pScore = 0; 
+    state.aiScore = 0;
+    isPaused = false;
+    
+    document.getElementById('pause-overlay').classList.add('hidden');
+    document.querySelector('#pause-btn svg').innerHTML = '<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>';
+
+    resetBall();
+    gameRunning = true;
+    update();
+}
+
+function restartGame() {
+    state.pScore = 0; 
+    state.aiScore = 0;
+    isPaused = false;
+    document.getElementById('pause-overlay').classList.add('hidden');
+    resetBall();
+}
+
+function returnToMenu() {
+    gameRunning = false;
+    isPaused = false;
+    cancelAnimationFrame(animationId);
+    
+    if (state.pScore > 0) saveScore(state.pScore);
+    
+    showScreen('main-menu');
+}
+
+/** HIGH SCORES & LOCALSTORAGE **/
+function saveScore(val) {
+    const scores = JSON.parse(localStorage.getItem(STORAGE_KEYS.SCORES) || '[]');
+    scores.push({ 
+        score: val, 
+        date: new Date().toLocaleDateString(undefined, {month:'short', day:'numeric', year:'2-digit'}),
+        time: new Date().toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'})
+    });
+    localStorage.setItem(STORAGE_KEYS.SCORES, JSON.stringify(scores));
+}
+
+function showHighScores() {
+    showScreen('high-scores-screen');
+    const list = document.getElementById('scores-list');
+    const scores = JSON.parse(localStorage.getItem(STORAGE_KEYS.SCORES) || '[]');
+    const sorted = scores.sort((a,b) => b.score - a.score).slice(0, 10);
+    
+    list.innerHTML = sorted.map((s, i) => {
+        let textStyle = "text-zinc-400";
+        let wrapperClass = "border-zinc-800 bg-zinc-900";
+        let icon = "";
+        
+        if (i === 0) {
+            textStyle = "gold-rank font-bold";
+            wrapperClass = "border-yellow-600/50 bg-yellow-900/10 shadow-[0_0_15px_rgba(251,191,36,0.15)]";
+            icon = "🥇";
+        } else if (i === 1) {
+            textStyle = "silver-rank font-bold";
+            wrapperClass = "border-slate-400/50 bg-slate-800/20";
+            icon = "🥈";
+        } else if (i === 2) {
+            textStyle = "bronze-rank font-bold";
+            wrapperClass = "border-orange-600/50 bg-orange-900/10";
+            icon = "🥉";
+        }
+
+        return `
+        <div class="flex justify-between items-center p-4 border rounded-lg transition-transform hover:scale-[1.02] ${wrapperClass}">
+            <div class="flex items-center gap-3">
+                <span class="text-xl ${textStyle}">${icon}</span>
+                <div class="flex flex-col">
+                    <span class="${textStyle} text-sm tracking-wider">RANK 0${i+1}</span>
+                    <span class="text-zinc-600 text-[8px] tracking-widest">${s.date} ${s.time}</span>
+                </div>
+            </div>
+            <span class="text-3xl ${textStyle}">${s.score}</span>
+        </div>
+        `;
+    }).join('') || `
+        <div class="flex flex-col items-center justify-center h-40 opacity-50">
+            <svg class="w-12 h-12 mb-4 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <p class="text-center text-zinc-500 tracking-widest">NO SCORES</p>
+        </div>
+    `;
+}
+
+function saveCustomLevel() {
+    const nameInput = document.getElementById('level-name');
+    const name = nameInput.value.trim().toUpperCase();
+    if (!name) return alert("CUSTOM LEVEL REQUIRES NAME");
+    
+    const levels = JSON.parse(localStorage.getItem(STORAGE_KEYS.LEVELS) || '{}');
+    levels[name] = {
+        name,
+        ballSpeed: parseFloat(document.getElementById('l-ball').value) || 6,
+        paddleSpeed: parseFloat(document.getElementById('l-pad').value) || 12,
+        aiSpeed: parseFloat(document.getElementById('l-ai').value) || 5,
+        aiInc: parseInt(document.getElementById('l-inc').value) || 1,
+        playerInc: 1
+    };
+    
+    localStorage.setItem(STORAGE_KEYS.LEVELS, JSON.stringify(levels));
+    nameInput.value = ""; 
+    closeModal('create-level-modal');
+    renderCustomLevels();
+}
+
+function renderCustomLevels() {
+    const list = document.getElementById('custom-levels-list');
+    const levels = JSON.parse(localStorage.getItem(STORAGE_KEYS.LEVELS) || '{}');
+    const levelArray = Object.values(levels);
+    
+    list.innerHTML = levelArray.map(l => `
+        <div class="flex justify-between items-center p-4 bg-zinc-900/80 border border-zinc-700 hover:border-orange-500/50 rounded-lg group transition-colors">
+            <div onclick="playCustom('${l.name}')" class="flex-1 cursor-pointer">
+                <p class="text-orange-400 group-hover:text-orange-300 font-bold tracking-widest text-xs">${l.name}</p>
+                <div class="flex gap-4 mt-2">
+                    <span class="text-[8px] text-zinc-500 bg-black/50 px-2 py-1 rounded">V-MAX: ${l.ballSpeed}</span>
+                    <span class="text-[8px] text-zinc-500 bg-black/50 px-2 py-1 rounded">AI-PRC: ${l.aiSpeed}</span>
+                </div>
+            </div>
+            <button onclick="deleteLevel('${l.name}')" class="text-red-900/80 hover:text-red-500 ml-4 p-2 transition">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+    `).join('') || "<p class='text-center text-zinc-600 mt-10 tracking-widest'>NO CUSTOM LEVELS FOUND</p>";
+}
+
+function playCustom(name) {
+    const levels = JSON.parse(localStorage.getItem(STORAGE_KEYS.LEVELS) || '{}');
+    if (levels[name]) {
+        baseConfig = levels[name];
+        currentConfig = { ...baseConfig };
+        showScreen('game-screen');
+        resize();
+        state.pScore = 0; state.aiScore = 0;
+        resetBall();
+        gameRunning = true;
+        update();
+    }
+}
+
+function deleteLevel(name) {
+    const levels = JSON.parse(localStorage.getItem(STORAGE_KEYS.LEVELS) || '{}');
+    delete levels[name];
+    localStorage.setItem(STORAGE_KEYS.LEVELS, JSON.stringify(levels));
+    renderCustomLevels();
+}
+
+function confirmDeleteAll() {
+    if(confirm("INITIATING PURGE: ARE YOU CERTAIN?")) {
+        localStorage.removeItem(STORAGE_KEYS.LEVELS);
+        renderCustomLevels();
+    }
+}
+
+/** INPUT REGISTRATION **/
+function updatePaddlePos(y) {
+    if (!gameRunning || isPaused) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleY = canvas.height / rect.height;
+    state.pY = (y - rect.top) * scaleY - state.pH/2;
+    state.pY = Math.max(10, Math.min(canvas.height - state.pH - 10, state.pY));
+}
+
+canvas.addEventListener('mousemove', e => updatePaddlePos(e.clientY));
+canvas.addEventListener('touchmove', e => {
+    updatePaddlePos(e.touches[0].clientY);
+    e.preventDefault();
+}, { passive: false });
+canvas.addEventListener('touchstart', e => {
+    updatePaddlePos(e.touches[0].clientY);
+}, { passive: false });
+
+window.addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 'w' || e.key === 'ArrowUp') keys.up = true;
+    if (e.key.toLowerCase() === 's' || e.key === 'ArrowDown') keys.down = true;
+    if (e.key === 'p' || e.key === 'Escape') {
+        if (gameRunning) togglePause();
+    }
+});
+
+window.addEventListener('keyup', e => {
+    if (e.key.toLowerCase() === 'w' || e.key === 'ArrowUp') keys.up = false;
+    if (e.key.toLowerCase() === 's' || e.key === 'ArrowDown') keys.down = false;
+});
+
+// INITIAL BOOT SEQUENCE
+window.addEventListener('DOMContentLoaded', () => {
+    loadSettings(); // Syncs CSS variables & UI Inputs from storage immediately 
+});
+</script>
+</body>
+</html>
